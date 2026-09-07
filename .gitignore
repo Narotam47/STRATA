@@ -27,6 +27,11 @@ data/processed/*.duckdb.wal
 # scikit-learn version that wrote them, and they are regenerable.
 outputs/models/*.pkl
 outputs/models/*.joblib
+# Generated diagnostic plots — rebuildable, not versioned.
+outputs/figures/*.png
+outputs/figures/*.pdf
+outputs/plots/*.png
+outputs/plots/*.pdf
 
 # --- Python ----------------------------------------------------------------
 __pycache__/

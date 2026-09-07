@@ -91,6 +91,12 @@ def export_segment_summary() -> pd.DataFrame:
     out = EXTRACTS / "segment_summary.csv"
     df.to_csv(out, index=False)
 
+    # NOTE — Truly Lapsed count discrepancy (expected, not a bug):
+    # cluster_assignments.csv shows 191 Truly Lapsed; this file shows 175.
+    # The 16-household gap is households that lapsed before Q4 and carry no
+    # Q4 record in v_clv_split, so clv_regression.py could not produce a
+    # prediction for them. They appear in household_scored.csv as
+    # is_pred_only=True with hurdle_pred_clv=NaN.
     print(f"[1] segment_summary.csv — {len(df)} rows")
     print(df[["segment_name", "n_households", "mean_pred_clv", "clv_ci_low", "clv_ci_high",
               "zero_spend_rate_pct", "revenue_share_pct"]].to_string(index=False))
@@ -172,6 +178,8 @@ def export_household_scored() -> pd.DataFrame:
     for col in ["m_score", "r_score", "f_score"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # Sort by household_id so re-runs produce bit-identical files (no spurious git diffs).
+    df = df.sort_values("household_id").reset_index(drop=True)
     out = EXTRACTS / "household_scored.csv"
     df.to_csv(out, index=False)
 
