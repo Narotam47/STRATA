@@ -1,0 +1,48 @@
+# --- Raw source data -------------------------------------------------------
+# Excluded because it is third-party data we do not own and should not vendor:
+# it is fetched from a pinned upstream commit by `make data`, which makes the
+# repo reproducible without redistributing someone else's dataset under our
+# name. Keeping it out also keeps raw inputs immutable -- the only way to
+# change them is to change the pinned SHA in src/schema.py -- and keeps the
+# clone small (~36 MB of Parquet, most of it the 20.9M-row promotions table).
+data/raw/
+# ...but the provenance note must survive a clone.
+!data/raw/README.md
+
+# Derived database. Rebuildable from data/raw via `make ingest`; a 92 MB
+# binary that changes wholesale on every load has no business in git.
+data/processed/*.duckdb
+data/processed/*.duckdb.wal
+
+# --- Tableau ---------------------------------------------------------------
+# Extracts and packaged workbooks embed a copy of the data. The .twb workbook
+# XML is committed; anything carrying data with it is not.
+*.hyper
+*.tde
+*.twbx
+
+# --- Outputs ---------------------------------------------------------------
+# outputs/extracts/ IS committed -- see the note in that directory's README.
+# Model binaries are not: they are large, they are tied to the exact
+# scikit-learn version that wrote them, and they are regenerable.
+outputs/models/*.pkl
+outputs/models/*.joblib
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- Jupyter ---------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- OS / IDE --------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

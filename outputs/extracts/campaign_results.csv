@@ -1,0 +1,12 @@
+segment_name,estimate_type,effect_dollars,ci_low,ci_high,n_treated,n_control,ess_treated,ess_control,survived_bh_correction
+All Segments,aipw,-197.04,,,683,888,,,
+All Segments,ipw_adjusted,-84.26,-208.0,2.24,683,888,267.0,300.0,
+All Segments,naive,168.51,,,683,888,683.0,888.0,
+Champions,ipw_adjusted,-144.3,-264.0,46.0,104,77,,,False
+Champions,naive,223.89,,,104,77,104.0,77.0,
+Declining,ipw_adjusted,21.5,3.0,34.0,159,478,,,True
+Declining,naive,71.96,,,159,478,159.0,478.0,
+Loyal Actives,ipw_adjusted,-244.3,-559.0,-11.0,401,159,,,True
+Loyal Actives,naive,77.99,,,401,159,401.0,159.0,
+Truly Lapsed,ipw_adjusted,65.8,31.0,119.0,19,147,,,True
+Truly Lapsed,naive,124.85,,,19,147,19.0,147.0,

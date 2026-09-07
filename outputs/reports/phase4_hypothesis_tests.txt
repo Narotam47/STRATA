@@ -1,0 +1,155 @@
+==============================================================================
+TEST 1: Welch's One-Way ANOVA — hurdle_pred_clv across k=4 segments
+==============================================================================
+
+Null hypothesis: Mean predicted CLV is equal across Champions, Loyal Actives,
+  Declining, and Truly Lapsed households.
+
+Sample (Single-Trip excluded from all tests):
+  Champions        n= 394  mean=$  656.8  median=$  582.5  sd=$  460.5
+  Loyal Actives    n=1179  mean=$  506.6  median=$  410.5  sd=$  368.1
+  Declining        n= 671  mean=$  132.6  median=$  107.0  sd=$   97.4
+  Truly Lapsed     n= 175  mean=$  106.1  median=$   58.1  sd=$  141.9
+
+Levene's test (median): W=172.446, p=2.68e-101  → unequal variances confirmed
+Shapiro-Wilk on residuals: W=0.8755, p=2.72e-40  → non-normal residuals
+  (Welch ANOVA is robust to both; result stands)
+
+Welch's ANOVA: F(3, 633.5) = 517.55, p = 6.85e-170, η²p = 0.288
+
+Result: REJECT null — mean predicted CLV differs significantly across segments.
+
+Effect size: η²p = 0.288  (large by Cohen's conventions)
+
+Games-Howell pairwise comparisons:
+  Pair                                Δmean ($)                    95% CI     p-adj   Sig?
+  ------------------------------------------------------------------------------------
+  Champions vs Declining                 +524.2          [+478.0, +570.4]    0.0000     **
+  Champions vs Loyal Actives             +150.2          [+100.0, +200.4]    0.0000     **
+  Champions vs Truly Lapsed              +550.7          [+500.5, +600.9]    0.0000     **
+  Declining vs Loyal Actives             -374.0          [-396.3, -351.7]    0.0000     **
+  Declining vs Truly Lapsed               +26.5             [+4.1, +48.9]    0.0936     ns
+  Loyal Actives vs Truly Lapsed          +400.5          [+370.7, +430.3]    0.0000     **
+
+Business interpretation: The four segments separate along predicted CLV in a
+statistically decisive way (p<0.001, large η²p). Champions earn ~$166 more in
+predicted Q4 revenue than Loyal Actives — meaningful at scale across 394
+households. The Declining vs Truly Lapsed gap (~$25) is not practically
+significant despite statistical significance: both segments represent low-
+value recoveries and should be budgeted similarly, with tactics differentiated
+by tenure (reactivation vs basket-size growth) rather than CLV expectations.
+
+==============================================================================
+TEST 2: Chi-Square — Segment × Monetary Quintile (m_score)
+==============================================================================
+
+Null hypothesis: Segment membership is independent of monetary quintile.
+
+Contingency table (row = segment, col = m_score quintile 1–5):
+
+m_score          1    2    3    4    5
+cluster_name                          
+Champions       31   32   52  104  175
+Loyal Actives    7  163  325  367  317
+Declining      279  265  109   17    1
+Truly Lapsed   128   33    8    6    0
+
+Row percentages (within-segment quintile distribution):
+m_score           1     2     3     4     5
+cluster_name                               
+Champions       7.9   8.1  13.2  26.4  44.4
+Loyal Actives   0.6  13.8  27.6  31.1  26.9
+Declining      41.6  39.5  16.2   2.5   0.1
+Truly Lapsed   73.1  18.9   4.6   3.4   0.0
+
+χ²(12) = 1458.75, p = 2.98e-305
+Cramér's V = 0.448  (adds information beyond M)
+Expected cell freq < 5: 0.0% of cells (assumption met)
+
+Result: REJECT null — segment and m_score are not independent.
+
+Business interpretation: V=0.448 (<0.5): Segments add genuine information
+beyond monetary quintile. Recency and frequency features are doing real work
+in the k-means solution — two households with the same spend can land in
+different segments because of how recently or frequently they shopped.
+
+==============================================================================
+TEST 3: Chi-Square — Segment × Obs-Window Coupon Redemption
+  (Single-arm households only; concurrent-arm and unexposed excluded)
+==============================================================================
+
+Null hypothesis: Coupon redemption behaviour (ever redeemed vs never, in the obs window) is independent of segment membership.
+
+Single-arm exposed households included: 683
+
+Contingency table:
+
+               Never redeemed  Ever redeemed
+cluster_name                                
+Champions                  91             13
+Loyal Actives             348             53
+Declining                 154              5
+Truly Lapsed               18              1
+
+Row percentages:
+               Never redeemed  Ever redeemed
+cluster_name                                
+Champions                87.5           12.5
+Loyal Actives            86.8           13.2
+Declining                96.9            3.1
+Truly Lapsed             94.7            5.3
+
+χ²(3) = 13.25, p = 4.12e-03
+Cramér's V = 0.139  (weak)
+Expected cell freq < 5: 12.5% (assumption met)
+
+Result: REJECT null — redemption rate differs across segments.
+
+Business interpretation: Redemption rates within single-arm households are low
+overall (72 redeemers out of 683 households). Rates by segment — Champions:
+12.5%, Loyal Actives: 13.2%, Declining: 3.1%, Truly Lapsed: 5.3%. A
+statistically significant result here would suggest coupon-responsive
+households cluster non-randomly, which would justify segment-targeted coupon
+strategies. The single-arm restriction is correct methodology: mixing
+concurrent-arm households would confound coupon response with brand awareness
+effects.
+
+==============================================================================
+TEST 4: Bootstrap CIs (B=10,000) — Mean predicted CLV and mean obs_monetary per segment
+==============================================================================
+
+Method: Percentile bootstrap, 10,000 resamples with replacement within each segment. 95% CI = [2.5th, 97.5th] percentile of bootstrap distribution.
+
+Hurdle predicted CLV (Q4 forecast):
+  Segment                n   Mean ($)                  95% CI
+  ------------------------------------------------------------
+  Champions            394  $   656.8          [612.8, 702.2]
+  Loyal Actives       1179  $   506.6          [485.7, 527.8]
+  Declining            671  $   132.6          [125.4, 140.1]
+  Truly Lapsed         175  $   106.1           [86.8, 127.8]
+
+Observed monetary spend (obs window, Jan–Oct 2017):
+  Segment                n   Mean ($)                  95% CI
+  ------------------------------------------------------------
+  Champions            394  $ 2,348.8      [2,173.6, 2,524.0]
+  Loyal Actives       1179  $ 1,810.3      [1,724.2, 1,899.5]
+  Declining            671  $   413.6          [387.3, 441.8]
+  Truly Lapsed         175  $   247.2          [194.0, 308.7]
+
+CI overlap assessment (hurdle predicted CLV):
+  Champions vs Loyal Actives: SEPARATED
+  Champions vs Declining: SEPARATED
+  Champions vs Truly Lapsed: SEPARATED
+  Loyal Actives vs Declining: SEPARATED
+  Loyal Actives vs Truly Lapsed: SEPARATED
+  Declining vs Truly Lapsed: OVERLAP
+
+Business interpretation: The bootstrap CIs confirm three practically distinct
+CLV tiers. Champions and Loyal Actives occupy the high tier with non-
+overlapping CIs relative to the bottom two segments; the ~$164 Champions
+advantage over Loyal Actives has a tight CI, confirming it is a reliable
+structural difference rather than a sampling artefact. Declining and Truly
+Lapsed share the low tier — their CIs overlap — meaning the hurdle model
+cannot reliably rank-order these two segments. Budget allocation should treat
+them as a combined low-value pool and differentiate tactics by behavioural
+profile (tenure, basket size) rather than predicted CLV.

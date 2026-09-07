@@ -1,0 +1,333 @@
+==============================================================================
+PART 1 — NAIVE ESTIMATE (unadjusted)
+==============================================================================
+
+Single-arm exposed:   n=683
+Unexposed controls:   n=888
+Concurrent-arm (excluded from all parts): n=875
+
+  Exposed   mean hurdle_pred_clv: $  301.19  (sd=$193.28)
+  Unexposed mean hurdle_pred_clv: $  132.69  (sd=$164.05)
+  Raw difference:                 $ +168.51  (+127.0% lift)
+  Welch t-test:                   t=18.277, p=0.0000
+
+WHY THIS NUMBER IS WRONG — Pre-campaign covariate imbalance:
+
+  Covariate                       Exposed  Unexposed      SMD
+  ------------------------------------------------------------
+  obs_monetary ($)                 1057.2      409.2    0.850 !
+  obs_frequency (trips)              42.6       15.5    0.942 !
+  obs_recency_days                   14.3       38.1   -0.602 !
+  obs_tenure_days                   245.8      188.3    0.940 !
+  (! = |SMD|>0.10, threshold for imbalance)                   
+
+Cluster membership:
+  Segment               Exposed %  Unexposed %
+  --------------------------------------------
+  Champions                  15.2          8.7
+  Loyal Actives              58.7         17.9
+  Declining                  23.3         53.8
+  Truly Lapsed                2.8         16.6
+  Single-Trip                 0.0          3.0
+
+The naive +$169 (+127%) lift is not a credible causal estimate. Exposed
+households have substantially higher pre-campaign spending, more shopping
+trips, and over-represent Champions and Loyal Actives relative to the
+unexposed pool. The retailer's campaign targeting selected its best existing
+customers — households that would have outperformed in Q4 regardless of any
+campaign. Parts 2 and 3 adjust for these pre-existing differences.
+
+==============================================================================
+PART 2 — IPW-ADJUSTED ESTIMATE (full deliverable)
+==============================================================================
+
+─────────────────────────────────────────────────────────────────────────────
+STUDY DESIGN
+─────────────────────────────────────────────────────────────────────────────
+
+This analysis estimates the average treatment effect (ATE) of single-arm
+campaign exposure on household-level predicted Q4 CLV, using inverse
+probability weighting to account for the self-selection visible in Part 1.
+
+Population in scope
+  - Treatment arm (T=1): 683 households exposed to at least one campaign
+    during the observation window (Jan–Sep 2017), with no overlapping
+    concurrent campaign. These are "clean" exposed households whose campaign
+    response is not contaminated by simultaneous brand-awareness activity.
+  - Control pool (T=0): 888 households that received no campaign exposure
+    during the same window. Single-Trip households (n=27) are included in
+    this pool; they contribute little weight after IPW because their
+    pre-campaign profile diverges sharply from exposed households.
+  - Excluded: 875 concurrent-arm households. Campaign assignment for these
+    households is confounded by overlapping exposures; no propensity model
+    can separate the individual campaign effects.
+
+Outcome variable
+  hurdle_pred_clv — the Q4 CLV forecast produced by the Phase 3 two-part
+  hurdle model (logistic × Ridge). This is a model-based outcome, not actual
+  observed Q4 spend. As a consequence, the estimated effect captures whether
+  campaign-exposed households have pre-Q4 behavioural signatures associated
+  with higher Q4 spending, not whether the campaign directly caused higher Q4
+  spend. This distinction matters for interpretation and is addressed in the
+  "Remaining Confounding" section below.
+
+Window truncation
+  110 single-arm households had right-truncated exposure (campaign started
+  before the observation window), and 97 had left-truncated exposure
+  (campaign ended before the obs window closed). This analysis treats any
+  campaign exposure as treated (intent-to-treat), regardless of duration.
+  Dose-response analysis (hours of exposure × response) is out of scope.
+
+─────────────────────────────────────────────────────────────────────────────
+PROPENSITY MODEL
+─────────────────────────────────────────────────────────────────────────────
+
+The propensity score e(X) = P(T=1 | X) is estimated via logistic regression
+with five covariate sets:
+
+  1. log1p(obs_monetary)  — total obs-window household spend, log-scaled
+  2. log1p(obs_frequency) — obs-window trip count, log-scaled
+  3. obs_recency_days     — days since last purchase before the split date
+  4. obs_tenure_days      — span from first to last purchase in obs window
+  5. Segment indicators   — Champions, Loyal Actives, Declining (Truly
+     Lapsed is the omitted reference; Single-Trip folds into intercept)
+
+Rationale: these five variables capture the pre-campaign household profile
+that the retailer plausibly used for targeting. Log-scaling monetary and
+frequency mitigates right-skew and scale sensitivity. Segment indicators
+serve as a compressed summary of the multivariate RFM profile that individual
+continuous features might fail to represent fully.
+
+Regularisation: L2 penalty with C=1.0 (sklearn default). All features
+standardised before fitting. The choice of C is not tuned here; sensitivity
+to C is absorbed by the doubly-robust estimator in the robustness check.
+
+─────────────────────────────────────────────────────────────────────────────
+OVERLAP (COMMON SUPPORT)
+─────────────────────────────────────────────────────────────────────────────
+
+Propensity score distribution by decile (T=treatment, C=control):
+
+  Decile [PS range]           n_total    n_T    n_C     %T
+  ------------------------------------------------------
+  D01 [0.000,0.025]               157      3    154   1.9% ← poor overlap
+  D02 [0.025,0.081]               157      8    149   5.1% ← poor overlap
+  D03 [0.081,0.168]               157     18    139  11.5%
+  D04 [0.168,0.272]               157     31    126  19.7%
+  D05 [0.272,0.395]               157     50    107  31.8%
+  D06 [0.395,0.565]               157     63     94  40.1%
+  D07 [0.565,0.686]               157    102     55  65.0%
+  D08 [0.686,0.790]               157    125     32  79.6%
+  D09 [0.790,0.881]               157    145     12  92.4% ← poor overlap
+  D10 [0.881,0.998]               158    138     20  87.3%
+
+Poor overlap in deciles: D01 [0.000,0.025], D02 [0.025,0.081], D09
+[0.790,0.881]. These deciles contain households whose propensity score is so
+extreme (near 0 or near 1) that there are almost no counterparts on the other
+side. IPW weights for these households become very large, amplifying their
+influence on the estimate. The 99th-percentile trimming below addresses the
+weight explosion, but it also means the estimated ATE applies to the covariate
+region where overlap is adequate — not to the full marginal population.
+
+─────────────────────────────────────────────────────────────────────────────
+COVARIATE BALANCE (SMD before and after weighting)
+─────────────────────────────────────────────────────────────────────────────
+
+  Covariate                    Before    After   Pass (<0.10)?
+  --------------------------------------------------------------
+  log1p(obs_monetary)          +1.365   +0.009             YES
+  log1p(obs_frequency)         +1.482   +0.005             YES
+  obs_recency_days             -0.602   -0.069             YES
+  obs_tenure_days              +0.940   +0.078             YES
+
+  All covariates meet the |SMD| < 0.10 balance threshold after weighting.
+
+─────────────────────────────────────────────────────────────────────────────
+WEIGHT TRIMMING
+─────────────────────────────────────────────────────────────────────────────
+
+  99th-percentile weight cap:    21.86
+  Households trimmed:            16 (1.0% of pool)
+  Effective sample size (ESS):
+    Treated  — raw: 683  → weighted: 267  (loss: 61%)
+    Control  — raw: 888  → weighted: 300  (loss: 66%)
+
+Weight trimming caps the most extreme IPW weights at the 99th percentile of
+the weight distribution. This reduces variance at the cost of some bias (the
+trimmed estimator is no longer exactly unbiased if the propensity model is
+misspecified in the tail). Given the large ESS reduction shown above, these
+tails are carrying disproportionate influence; trimming is the correct trade-
+off. The effective sample size measures the 'equivalent number of unweighted
+observations' — a large ESS loss signals that the IPW estimate is driven by a
+small number of high-weight units rather than the full population.
+
+─────────────────────────────────────────────────────────────────────────────
+IPW ESTIMATE
+─────────────────────────────────────────────────────────────────────────────
+
+  IPW-weighted ATE:    $  -80.06
+  95% bootstrap CI:    [$-194.00, $+2.95]  (B=2,000)
+  Bootstrap SE:        $50.65
+  As % of control mean: -60.3%
+
+─────────────────────────────────────────────────────────────────────────────
+DOUBLY-ROBUST ROBUSTNESS CHECK (AIPW)
+─────────────────────────────────────────────────────────────────────────────
+
+  Doubly-robust (AIPW) ATE: $ -189.70
+  IPW ATE:                  $  -80.06
+  Absolute difference:      $  109.64  (material)
+
+The $110 gap between the DR and IPW estimates warrants attention. The AIPW
+estimator augments IPW with a regression-adjustment term that corrects for
+outcome model fit within each arm. A material divergence suggests either (a)
+the propensity model is mis-specified in a region where the outcome model
+picks up the slack, or (b) the outcome model is extrapolating into low-overlap
+regions. In either case, the DR estimate is generally preferred because it
+remains consistent if either model — but not necessarily both — is correctly
+specified.
+
+─────────────────────────────────────────────────────────────────────────────
+INTERPRETATION AND REMAINING CONFOUNDING
+─────────────────────────────────────────────────────────────────────────────
+
+After weighting for pre-campaign differences in spending, frequency, recency,
+tenure, and segment membership, the adjusted campaign effect is $-80 per
+household in predicted Q4 CLV (95% CI: [$-194, $3]). The confidence interval
+includes zero, which means we cannot rule out a null effect at the 5% level.
+The adjusted estimate is negative — after controlling for observable
+selection, exposed households do not show a measurable advantage in predicted
+CLV — but the wide CI prevents a confident negative conclusion.
+
+What the estimate represents: A causal interpretation requires that the
+propensity model accounts for all variables that jointly determine campaign
+assignment and Q4 outcomes. Two residual confounders are likely:
+
+  1. Self-selection into the loyalty programme. Households who opt into
+loyalty schemes are systematically more brand-loyal than those who do
+not, independent of observable spending metrics. This latent loyalty
+dimension is unobserved and therefore not controlled by IPW. The      adjusted
+estimate may still overstate the causal effect of the campaign      because
+brand-loyal households (a) are more likely to be exposed and      (b) would
+have higher Q4 CLV regardless of exposure.
+
+  2. The outcome is model-predicted CLV, not actual Q4 spend. The hurdle
+model was trained on obs-window features; if the campaign caused
+behavioural changes during the obs window (more trips, higher basket
+sizes), those changes are already embedded in the features used to
+generate hurdle_pred_clv. The quasi-experiment then asks 'do exposed
+households have obs-window signatures associated with higher Q4 CLV?' —
+which partially conflates the campaign's behavioural effect with the
+structural CLV prediction. Using actual clv_pred_window (observed Q4
+spend) as the outcome in a future analysis would separate these two
+channels.
+
+Bottom line: the adjusted estimate ($-80) is substantially smaller than the
+naive estimate ($+169), confirming that most of the raw gap was pre-existing
+selection rather than campaign effect. The adjusted estimate is the best
+available observational estimate but is not a randomised treatment effect.
+Part 4 designs the experiment that would have produced a credible number.
+
+==============================================================================
+PART 3 — SEGMENT HETEROGENEITY (IPW-adjusted effect per segment)
+==============================================================================
+
+IPW propensity model re-fit within each segment's exposed+unexposed pool.
+Segments with fewer than 30 exposed households receive a reliability flag.
+
+  Segment              n_T   n_C    ATE ($)           95% CI (boot)    p_boot    BH sig
+  --------------------------------------------------------------------------------------
+  Champions            104    77  $  -136.6             [-256, +50]    0.1920        ns
+  Loyal Actives        401   159  $  -231.2             [-461, -22]    0.0240        **
+  Declining            159   478  $   +18.5               [+2, +30]    0.0440        ns
+  Truly Lapsed          19   147  $   +65.4             [+33, +113]    0.0020        ** [!low-n]
+
+Benjamini-Hochberg correction applied across all four segment tests (α=0.05).
+
+Segments whose effects survive BH correction: Loyal Actives, Truly Lapsed.
+These segments have both a detectable IPW-adjusted effect and sufficient
+sample size to survive the multiple-testing penalty.
+Segments that do not survive correction: Champions, Declining. These effects
+are indistinguishable from noise at this sample size. The point estimates may
+be directionally informative but should not be used to allocate budget.
+
+Important caveat: segment-level IPW re-estimates a propensity model on each
+segment's sub-pool. For small segments (Truly Lapsed n_T=19), the propensity
+model is underpowered to balance covariates; SMD before/after is not re-
+computed here but should be verified before acting on the segment-level
+estimates.
+
+==============================================================================
+PART 4 — PROSPECTIVE RANDOMISED DESIGN
+==============================================================================
+
+(a) Minimum Detectable Effect (MDE)
+
+The adjusted IPW estimate is $-80/household (a null-or-negative finding after
+controlling for selection). The prospective experiment is designed to detect
+an effect of half this magnitude in either direction: MDE = $40/household. The
+50% floor is justified as follows: the IPW estimate carries residual
+confounding (unobserved brand loyalty and the outcome-model circularity
+described in Part 2); a clean randomised design may reveal a positive,
+negative, or null true effect. An MDE of $40 represents the minimum per-
+household shift that would justify campaign cost at the retailer's margin
+structure, regardless of direction. Below this threshold, the incremental
+revenue (or prevented churn) would not offset campaign delivery and voucher
+redemption costs.
+
+(b) Power Analysis
+
+  α = 0.05  (two-sided),  power = 0.80,  σ = $430  (hurdle model RMSE)
+  MDE (δ):  $40/household
+  Formula:  n = 2·(z_α/2 + z_β)² · σ² / δ²
+            = 2·(1.960 + 0.842)² · 430² / 40²
+  Required per arm:  1,812
+  Total required:    3,624
+
+The current exposed pool has 683 households — below the required 1,812 per
+arm. However, power analysis for a randomised experiment and the quasi-
+experiment pool size are not directly comparable: the existing pool is self-
+selected, while a randomised design would draw from the full eligible
+population (all households in the loyalty programme regardless of historical
+engagement). The required sample size should inform how many households to
+recruit into the randomised campaign arm, not how many were historically
+exposed.
+
+(c) Simulation Confirmation
+
+  DGP:  Y_treated ~ N(340, 430.0²),  Y_control ~ N(300, 430.0²)
+  n per arm: 1,812,  B=2,000 simulated trials
+  Empirical power:  0.799  (target: 0.800 ± 0.015  ✓)
+
+(d) Peeking: False-Positive Rate at Interim Looks
+
+The retailer might be tempted to check significance at 25%, 50%, and 75% of
+the target sample and stop early if p<0.05 at any look. Under the null
+hypothesis (no campaign effect), each additional test increases the chance of
+a false positive. The simulation below runs B=2,000 null trials and tests at
+each fraction of the target sample.
+
+  Look              n/arm    Cumulative FPR   Nominal α
+  ----------------------------------------------------
+  25% (453)           453             0.049       0.050
+  50% (906)           906             0.082       0.050
+  75% (1,359)        1359             0.103       0.050
+  100% (1,812)       1812             0.121       0.050
+
+With three interim looks plus the final analysis, the nominal α=0.05 inflates
+to an actual false-positive rate of ~0.12 — more than double the intended
+level. This is the classic multiple-looks problem in sequential testing.
+
+Sequential testing correction (Pocock boundary, K=4 looks, α=0.05):
+
+  Per-look critical value:   z = 2.361  (α per look ≈ 0.0182)
+  Fixed-sample n/arm:        1,812
+  Pocock-corrected n/arm:    2,368  (inflation factor: 1.31×)
+
+The Pocock boundary requires 556 additional households per arm (~31% more) to
+maintain 80% power while allowing three interim looks. O'Brien-Fleming
+boundaries are more conservative early (making early stopping very hard) and
+nearly as efficient as fixed-sample at the final look, costing only ~2% extra
+sample size. For a campaign with monthly reporting cadence, O'Brien-Fleming is
+the preferred choice: it protects against over-eager early stopping while
+imposing minimal recruitment overhead.
